@@ -1,6 +1,6 @@
 import warnings
 from functools import partial
-from typing import ClassVar, Final, Self
+from typing import ClassVar, Final
 
 import jax.numpy as jnp
 import numpyro
@@ -12,6 +12,7 @@ from jax.typing import ArrayLike
 from numpyro.distributions import constraints
 from numpyro.distributions.util import promote_shapes, validate_sample
 from numpyro.util import is_prng_key
+from typing_extensions import Self
 
 from .util import (
     _FOUR_SIGMA_P,

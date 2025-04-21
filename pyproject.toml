@@ -28,7 +28,7 @@ exclude = []
 
 [tool.ruff]
 line-length = 88
-target-version = "py311"
+target-version = "py310"
 
 [tool.ruff.lint]
 ignore = ["D", "COM812", "S101"]
