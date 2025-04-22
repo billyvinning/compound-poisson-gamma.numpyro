@@ -11,7 +11,6 @@ import numpyro
 import numpyro.distributions as dist
 from jax import lax, random
 from jax.scipy.special import logsumexp
-from jax.scipy.stats import gamma, poisson
 from jax.typing import ArrayLike
 from numpyro.distributions import constraints
 from numpyro.distributions.util import promote_shapes, validate_sample
@@ -57,6 +56,7 @@ class CompoundPoissonGamma(dist.Distribution):
         alpha: float,
         beta: float,
         *,
+        max_m: int = _MAX_M + 1,
         validate_args: bool | None = None,
     ) -> None:
         batch_shape = lax.broadcast_shapes(
@@ -67,12 +67,16 @@ class CompoundPoissonGamma(dist.Distribution):
 
         self.lam, self.alpha, self.beta = promote_shapes(lam, alpha, beta)
 
-        self._poisson = dist.Poisson(rate=lam, validate_args=validate_args)
+        m = jnp.arange(1, max_m)
+        self.m = jnp.expand_dims(m, axis=tuple(range(1, jnp.ndim(self.alpha) + 1)))
+
+        self._poisson = dist.Poisson(rate=self.lam, validate_args=validate_args)
         self._build_gamma = partial(
             dist.Gamma,
             rate=self.beta,
             validate_args=validate_args,
         )
+        self._gammas = self._build_gamma(self.m * self.alpha)
 
         super().__init__(batch_shape=batch_shape, validate_args=validate_args)
 
@@ -125,19 +129,16 @@ class CompoundPoissonGamma(dist.Distribution):
 
     @validate_sample
     def log_prob(self, value: ArrayLike) -> ArrayLike:
-        m = jnp.arange(1, _MAX_M)
         # Must mask zero elements from the Gamma Log-PDF function and replace with
         # safe values. Otherwise we will run into nan gradients as per
         # https://docs.jax.dev/en/latest/faq.html#gradients-contain-nan-where-using-where
         nonzero_mask = jnp.asarray(value) > 0
         nonzero_logprob = logsumexp(
-            poisson.logpmf(m, self.lam)[:, jnp.newaxis]
-            + gamma.logpdf(
-                jnp.where(nonzero_mask, value, 1.0),
-                a=(m * self.alpha)[:, jnp.newaxis],
-                scale=1 / self.beta,
+            self._poisson.log_prob(self.m)
+            + self._gammas.log_prob(
+                jnp.where(nonzero_mask, value, 1.0)[:, jnp.newaxis],
             ),
-            axis=0,
+            axis=1,
         )
         return jnp.where(nonzero_mask, nonzero_logprob, -self.lam)
 
@@ -151,6 +152,25 @@ def _example_compound_poisson_gamma_model(
     phi = numpyro.sample("phi", dist.HalfCauchy(phi_prior))
     sigma = numpyro.deterministic("sigma", jnp.sqrt(phi))
     theta = numpyro.sample("theta", dist.Uniform(_MIN_THETA, _MAX_THETA))
+
+    numpyro.sample(
+        "obs",
+        CompoundPoissonGamma.from_tweedie_params(mu, sigma, theta),
+        obs=y,
+    )
+
+
+def _example_multioutput_compound_poisson_gamma_model(
+    n: int,
+    mu_prior: float = 5.0,
+    phi_prior: float = 5.0,
+    y: ArrayLike | None = None,
+) -> None:
+    with numpyro.plate("N", n):
+        mu = numpyro.sample("mu", dist.HalfCauchy(mu_prior))
+        phi = numpyro.sample("phi", dist.HalfCauchy(phi_prior))
+        sigma = numpyro.deterministic("sigma", jnp.sqrt(phi))
+        theta = numpyro.sample("theta", dist.Uniform(_MIN_THETA, _MAX_THETA))
 
     numpyro.sample(
         "obs",
