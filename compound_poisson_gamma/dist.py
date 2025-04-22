@@ -27,6 +27,8 @@ from .util import (
 )
 
 _MAX_M: Final = 30
+_MIN_THETA: Final = 1.0
+_MAX_THETA: Final = 2.0
 
 
 def _check_lam(lam: float) -> None:
@@ -148,7 +150,7 @@ def _example_compound_poisson_gamma_model(
     mu = numpyro.sample("mu", dist.HalfCauchy(mu_prior))
     phi = numpyro.sample("phi", dist.HalfCauchy(phi_prior))
     sigma = numpyro.deterministic("sigma", jnp.sqrt(phi))
-    theta = numpyro.sample("theta", dist.Uniform(1.0, 2.0))
+    theta = numpyro.sample("theta", dist.Uniform(_MIN_THETA, _MAX_THETA))
 
     numpyro.sample(
         "obs",
