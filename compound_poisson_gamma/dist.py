@@ -48,7 +48,15 @@ class CompoundPoissonGamma(dist.Distribution):
         "beta": constraints.positive,
     }
     support = constraints.nonnegative
-    pytree_data_fields = ("lam", "alpha", "beta", "_poisson", "_build_gamma")
+    pytree_data_fields = (
+        "lam",
+        "alpha",
+        "beta",
+        "m",
+        "_poisson",
+        "_build_gamma",
+        "_gammas",
+    )
 
     def __init__(
         self,
